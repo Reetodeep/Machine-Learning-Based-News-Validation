@@ -1,129 +1,222 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+import numpy as np
+import pandas as pd
+import os
+for dirname, _, filenames in os.walk('/kaggle/input'):
+for filename in filenames:
+print(os.path.join(dirname, filename))
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import nltk
+from sklearn.preprocessing import LabelBinarizer
+from nltk.corpus import stopwords
+from nltk.stem.porter import PorterStemmer
+from wordcloud import WordCloud,STOPWORDS
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize,sent_tokenize
+from bs4 import BeautifulSoup
+import re,string,unicodedata
+from keras.preprocessing import text, sequence
+from nltk.tokenize.toktok import ToktokTokenizer
+from sklearn.metrics import classification_report,confusion_matrix,accuracy_score
+from sklearn.model_selection import train_test_split
+from string import punctuation
+from nltk import pos_tag
+from nltk.corpus import wordnet
+import keras
+from keras.models import Sequential
+from keras.layers import Dense,Embedding,LSTM,Dropout
+from keras.callbacks import ReduceLROnPlateau
+import tensorflow as tf
 
-# C extensions
-*.so
+IMPORTING DATA SET
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-pip-wheel-metadata/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+true = pd.read_csv("../input/fake-and-real-news-dataset/True.csv")
+false = pd.read_csv("../input/fake-and-real-news-dataset/Fake.csv")
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+DATA VISUALIZATION AND PRE PROCESSING
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+true.head()
+false.head()
+true['category'] = 1
+false['category'] = 0
+df = pd.concat([true,false])
+sns.set_style("dark")
+sns.countplot(df.category)
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
+BALANCING THE DATA SET
 
-# Translations
-*.mo
-*.pot
+df.head()
+df.isna().sum()
+df.title.count()
+df.subject.value_counts()
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+MERGING ALL THE TEXT DATA INTO 1 COLUMN i.e. 'text'
 
-# Flask stuff:
-instance/
-.webassets-cache
+plt.figure(figsize = (10,10))
+sns.set_style("dark")
+chart = sns.countplot(x = "subject", hue = "category" , data = df , palette = 'muted')
+chart.set_xticklabels(chart.get_xticklabels(),rotation=0)
+df['text'] = df['text'] + " " + df['title']
+del df['title']
+del df['subject']
+del df['date']
 
-# Scrapy stuff:
-.scrapy
+STOPWORDS
 
-# Sphinx documentation
-docs/_build/
+stop = set(stopwords.words('english'))
+punctuation = list(string.punctuation)
+stop.update(punctuation)
 
-# PyBuilder
-target/
+DATA CLEANING
 
-# Jupyter Notebook
-.ipynb_checkpoints
+def strip_html(text):
+soup = BeautifulSoup(text, "html.parser")
+return soup.get_text()
+#Removing the square brackets
+def remove_between_square_brackets(text):
+return re.sub('\[[^]]*\]', '', text)
+# Removing URL's
+def remove_between_square_brackets(text):
+return re.sub(r'http\S+', '', text)
+#Removing the stopwords from text
+def remove_stopwords(text):
+final_text = []
+for i in text.split():
+if i.strip().lower() not in stop:
+final_text.append(i.strip())
+return " ".join(final_text)
+#Removing the noisy text
+def denoise_text(text):
+text = strip_html(text)
+text = remove_between_square_brackets(text)
+text = remove_stopwords(text)
+return text
+#Apply function on review column
+df['text']=df['text'].apply(denoise_text)
 
-# IPython
-profile_default/
-ipython_config.py
+WORDCLOUD FOR REAL TEXT (LABEL - 1)
 
-# pyenv
-.python-version
+plt.figure(figsize = (20,20)) # Text that is not Fake
+wc = WordCloud(max_words = 2000 , width = 1600 , height = 800 , stopwords = STOPWORDS).g
+enerate(" ".join(df[df.category == 1].text))
+plt.imshow(wc , interpolation = 'bilinear')
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+WORDCLOUD FOR FAKE TEXT (LABEL - 0)
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow
-__pypackages__/
+plt.figure(figsize = (20,20)) # Text that is Fake
+wc = WordCloud(max_words = 2000 , width = 1600 , height = 800 , stopwords = STOPWORDS).g
+enerate(" ".join(df[df.category == 0].text))
+plt.imshow(wc , interpolation = 'bilinear')
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+Splitting the data into 2 parts - training and testing data
 
-# SageMath parsed files
-*.sage.py
+x_train,x_test,y_train,y_test = train_test_split(df.text,df.category,random_state = 0)
+max_features = 10000
+maxlen = 300
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+TOKENIZING TEXT
 
-# Spyder project settings
-.spyderproject
-.spyproject
+tokenizer = text.Tokenizer(num_words=max_features)
+tokenizer.fit_on_texts(x_train)
+tokenized_train = tokenizer.texts_to_sequences(x_train)
+x_train = sequence.pad_sequences(tokenized_train, maxlen=maxlen)
+tokenized_test = tokenizer.texts_to_sequences(x_test)
+X_test = sequence.pad_sequences(tokenized_test, maxlen=maxlen)
 
-# Rope project settings
-.ropeproject
+INTRODUCTION OF GLOVE FUNCTION
 
-# mkdocs documentation
-/site
+EMBEDDING_FILE = '../input/glove-twitter/glove.twitter.27B.100d.txt'
+def get_coefs(word, *arr):
+return word, np.asarray(arr, dtype='float32')
+embeddings_index = dict(get_coefs(*o.rstrip().rsplit(' ')) for o in open(EMBEDDING_FILE))
+all_embs = np.stack(embeddings_index.values())
+emb_mean,emb_std = all_embs.mean(), all_embs.std()
+embed_size = all_embs.shape[1]
+word_index = tokenizer.word_index
+nb_words = min(max_features, len(word_index))
+#change below line if computing normal stats is too slow
+embedding_matrix = embedding_matrix = np.random.normal(emb_mean, emb_std, (nb_words, emb
+ed_size))
+for word, i in word_index.items():
+if i >= max_features: continue
+embedding_vector = embeddings_index.get(word)
+if embedding_vector is not None: embedding_matrix[i] = embedding_vector
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+batch_size = 256
+epochs = 10
+embed_size = 100
+learning_rate_reduction = ReduceLROnPlateau(monitor='val_accuracy', patience = 2, verbose=1,factor=0.5, min_lr=0.00001)
 
-# Pyre type checker
-.pyre/
+TRAINING THE MODEL
+
+#Defining Neural Network
+model = Sequential()
+#Non-trainable embeddidng layer
+model.add(Embedding(max_features, output_dim=embed_size, weights=[embedding_matrix], input_length=maxlen, trainable=False))
+#LSTM
+model.add(LSTM(units=128 , return_sequences = True , recurrent_dropout = 0.25 , dropout= 0.25))
+model.add(LSTM(units=64 , recurrent_dropout = 0.1 , dropout = 0.1))
+model.add(Dense(units = 32 , activation = 'relu'))
+model.add(Dense(1, activation='sigmoid'))
+model.compile(optimizer=keras.optimizers.Adam(lr = 0.01), loss='binary_crossentropy', metrics=['accuracy'])
+model.summary()
+history = model.fit(x_train, y_train, batch_size = batch_size , validation_data = (X_test,y_test) , epochs = epochs , callbacks = [learning_rate_reduction])
+
+ANALYSIS AFTER TRAINING OF MODEL
+
+print("Accuracy of the model on Training Data is - " , model.evaluate(x_train,y_train)[1]*100)
+print("Accuracy of the model on Testing Data is - " , model.evaluate(X_test,y_test)[1]*100)
+epochs = [i for i in range(10)]
+fig , ax = plt.subplots(1,2)
+train_acc = history.history['accuracy']
+train_loss = history.history['loss']
+val_acc = history.history['val_accuracy']
+val_loss = history.history['val_loss']
+fig.set_size_inches(20,10)
+ax[0].plot(epochs , train_acc , 'go-' , color='b', label = 'Training Accuracy')
+ax[0].plot(epochs , val_acc , 'ro-' , label = 'Testing Accuracy')
+ax[0].set_title('Accuracy Curve', fontsize='16')
+ax[0].legend()
+ax[0].set_xlabel("Epochs", fontsize='14')
+ax[0].set_ylabel("Accuracy", fontsize='14')
+ax[1].plot(epochs , train_loss , 'go-' ,color='b', label = 'Training Loss')
+ax[1].plot(epochs , val_loss , 'ro-' , label = 'Testing Loss')
+ax[1].set_title('Loss Curve', fontsize='16')
+ax[1].legend()
+ax[1].set_xlabel("Epochs", fontsize='14')
+ax[1].set_ylabel("Loss", fontsize='14')
+plt.show()
+pred = model.predict_classes(X_test)
+pred[:10]
+
+CLASSIFICATION REPORT AND CONFUSION MATRIX
+
+print(classification_report(y_test, pred, target_names = ['Fake','Not Fake']))
+cm = confusion_matrix(y_test,pred)
+cm
+cm = pd.DataFrame(cm , index = ['Fake','Not Fake'] , columns = ['Fake','Not Fake'])
+In [62]:
+plt.figure(figsize = (10,10))
+Out[42]:
+array([[0],
+[0],
+[0],
+[0],
+[1],
+[1],
+[1],
+[0],
+[1],
+[0]], dtype=int32)
+precision recall f1-score support
+Fake 1.00 1.00 1.00 5858
+Not Fake 1.00 1.00 1.00 5367
+accuracy 1.00 11225
+macro avg 1.00 1.00 1.00 11225
+weighted avg 1.00 1.00 1.00 11225
+plt.figure(figsize = (10,10))
+sns.heatmap(cm,cmap= "Reds", linecolor = 'black' , linewidth = 1 , annot = True, fmt='', xticklabels = ['Fake','Not Fake'] , yticklabels = ['Fake','Not Fake'])
+plt.xlabel("Actual", fontsize=18)
+plt.ylabel("Predicted", fontsize= 18)
